@@ -1,7 +1,7 @@
 import google.generativeai as genai
+import os
 
-# PASTE YOUR KEY HERE
-genai.configure(api_key="AIzaSyCTiHc9QNZFUoHdxyJQJ2oF6mWlvSFhAJM") 
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY")) 
 
 print("Checking available models...")
 try:

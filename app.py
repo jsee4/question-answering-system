@@ -1,17 +1,21 @@
 import streamlit as st
 import psycopg2
 import hashlib
+import os
+from dotenv import load_dotenv
 from embedder import Embedder
 from vector_db import VectorDB
 from query import answer_query
 from chunker import Chunker
 import google.generativeai as genai
 
-DB_NAME = "allen"
-DB_USER = "postgres"
-DB_PASS = "allen"
-DB_HOST = "localhost"
-GOOGLE_API_KEY = "" 
+load_dotenv()
+
+DB_NAME = os.getenv("DB_NAME")
+DB_USER = os.getenv("DB_USER")
+DB_PASS = os.getenv("DB_PASS")
+DB_HOST = os.getenv("DB_HOST")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 genai.configure(api_key=GOOGLE_API_KEY)
 
@@ -79,6 +83,18 @@ def delete_document_from_db(doc_id):
         return True
     except Exception as e:
         st.error(f"Delete failed: {e}")
+        return False
+
+def delete_user_from_db(user_id):
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute('DELETE FROM "user" WHERE id = %s', (str(user_id),))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        st.error(f"Delete user failed: {e}")
         return False
 
 @st.cache_resource
@@ -180,19 +196,42 @@ elif choice == "Search":
     
     user_query = st.text_input("Ask a question:")
     if st.button("Search") and user_query:
+        query_id = None
         try:
             conn = get_db_connection()
             cur = conn.cursor()
-            cur.execute("INSERT INTO querylog (user_id, query_text) VALUES (%s, %s)", 
+            cur.execute("INSERT INTO querylog (user_id, query_text) VALUES (%s, %s) RETURNING id", 
                         (st.session_state['user_id'], user_query))
+            query_id = cur.fetchone()[0]
             conn.commit()
             conn.close()
         except:
             pass
 
-        results = answer_query(db, embedder, user_query, top_k=3)
+        results_data = db.query(embedder, user_query, n_results=3)
+        results = results_data["documents"]
+        result_ids = results_data["ids"]
+    
+        if query_id:
+            try:
+                conn = get_db_connection()
+                cur = conn.cursor()
+                doc_ids = set()
+                for result_id in result_ids:
+                    parts = result_id.split('|')
+                    if len(parts) >= 2:
+                        doc_ids.add(parts[1])
+                for doc_id in doc_ids:
+                    cur.execute("INSERT INTO queryretrieval (query_id, document_id) VALUES (%s, %s)", 
+                               (query_id, doc_id))
+                conn.commit()
+                conn.close()
+            except Exception as e:
+                print(f"Failed to log query retrieval: {e}")
         
-        context = "\n".join([res['text'] for res in results]) if results else ""
+        # print(f'results is {type(results)}: {results}')
+        # context = "\n".join([res['text'] for res in results]) if results else ""
+        context = "\n".join(results) if results else ""
         prompt = f"Context: {context}\n\nQuestion: {user_query}\nAnswer:"
         
         try:
@@ -205,7 +244,8 @@ elif choice == "Search":
         st.subheader("Sources")
         for res in results:
             with st.expander(f"Read Source"):
-                st.write(res['text'])
+                # st.write(res['text'])
+                st.write(res)
 
 elif choice == "Curator Dashboard":
     st.title("📂 Curator Dashboard")
@@ -254,11 +294,21 @@ elif choice == "Admin Dashboard":
     users = cur.fetchall()
     
     for u in users:
-        with st.expander(f"{u[1]} ({u[3]})"):
-            new_role = st.selectbox("Role", ["admin", "curator", "enduser"], index=["admin", "curator", "enduser"].index(u[3]), key=f"role_{u[0]}")
-            if st.button("Update Role", key=f"btn_{u[0]}"):
-                cur.execute('UPDATE "user" SET role = %s WHERE id = %s', (new_role, u[0]))
-                conn.commit()
-                st.success("Updated!")
+        col1, col2 = st.columns([4, 1])
+        
+        with col1:
+            with st.expander(f"{u[1]} ({u[3]})"):
+                new_role = st.selectbox("Role", ["admin", "curator", "enduser"], 
+                                       index=["admin", "curator", "enduser"].index(u[3]), 
+                                       key=f"role_{u[0]}")
+                if st.button("Update Role", key=f"btn_{u[0]}"):
+                    cur.execute('UPDATE "user" SET role = %s WHERE id = %s', (new_role, u[0]))
+                    conn.commit()
+                    st.success("Updated!")
+                    st.rerun()
+        
+        if col2.button("Delete", key=f"del_{u[0]}"):
+            if delete_user_from_db(u[0]):
+                st.success("User deleted!")
                 st.rerun()
     conn.close()

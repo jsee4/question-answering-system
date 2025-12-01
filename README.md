@@ -140,6 +140,20 @@ Logging: All queries are logged to the PostgreSQL querylog table.
 How to Run the App
 Start PostgreSQL Server: Ensure your local Postgres server is running.
 
+**Setup Environment Variables:**
+
+Create a `.env` file in the project root with your credentials:
+
+```
+DB_NAME=johne
+DB_USER=johne
+DB_PASS=your_password
+DB_HOST=localhost
+GOOGLE_API_KEY=your_google_api_key
+```
+
+Get your Google API key from: https://aistudio.google.com/app/apikey
+
 Install Dependencies:
 
 Bash

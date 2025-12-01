@@ -21,14 +21,14 @@ CREATE TABLE document (
   title text NOT NULL,
   type text,
   source text,
-  added_by uuid NOT NULL REFERENCES "user"(id) ON DELETE RESTRICT,
+  added_by uuid NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
   created_at timestamptz NOT NULL DEFAULT now(),
   processed boolean NOT NULL DEFAULT false
 );
 
 CREATE TABLE querylog (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid REFERENCES "user"(id) ON DELETE SET NULL,
+  user_id uuid REFERENCES "user"(id) ON DELETE CASCADE,
   query_text text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
